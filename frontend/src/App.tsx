@@ -1,7 +1,13 @@
+import { Routes, Route, Navigate } from "react-router-dom";
+import LoginAndRegister from "./pages/login/login-and-register";
+
 const App = () => {
   return (
-    <div className="text-6xl">App</div>
-  )
-}
+    <Routes>
+      <Route path="/login" element={<LoginAndRegister />} />
+      <Route path="/" element={<Navigate to="/login" replace />} />
+    </Routes>
+  );
+};
 
-export default App
+export default App;
