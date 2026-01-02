@@ -32,7 +32,7 @@ const VideoPage = () => {
   const videoSrc = videoMap[video.videoSrc];
 
   return (
-    <div className="min-h-screen bg-black text-white p-8">
+    <div className="min-h-screen bg-gradient-to-bl from-zinc-950 via-zinc-900 to-zinc-800 text-white p-8">
       <div className="max-w-4xl mx-auto">
         <button
           onClick={() => navigate("/dashboard")}
@@ -56,8 +56,7 @@ const VideoPage = () => {
         </button>
 
         <div className="space-y-6 animate-fade-in-up">
-          {/* Video Player Container */}
-          <div className="w-full aspect-video border border-zinc-800 rounded-2xl overflow-hidden bg-zinc-950 shadow-2xl">
+          <div className="w-full aspect-video border border-zinc-800 rounded-2xl overflow-hidden bg-black shadow-2xl">
             <video
               src={videoSrc}
               controls
@@ -68,16 +67,14 @@ const VideoPage = () => {
             </video>
           </div>
 
-          {/* Video Details */}
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold font-handwriting tracking-wide">
+            <h1 className="text-3xl font-bold font-handwriting tracking-wide text-white">
               {video.title}
             </h1>
             <div className="flex items-center gap-4">
-              <span className="px-3 py-1 border border-zinc-800 rounded-full text-sm text-zinc-500 bg-zinc-950">
+              <span className="px-3 py-1 border border-zinc-800 rounded-full text-sm text-zinc-400 bg-zinc-900">
                 {video.status}
               </span>
-              <span className="text-zinc-500 text-sm">ID: {video.id}</span>
             </div>
           </div>
         </div>
