@@ -17,8 +17,16 @@
     "express": "^5.2.1",
     "joi": "^18.0.2",
     "jsonwebtoken": "^9.0.3",
+    "module-alias": "^2.2.3",
     "mongoose": "^9.1.1",
     "nodemon": "^3.1.11",
     "socket.io": "^4.8.3"
+  },
+  "_moduleAliases": {
+    "@": ".",
+    "@models": "models",
+    "@controllers": "controllers",
+    "@middlewares": "middlewares",
+    "@routes": "routes"
   }
 }
