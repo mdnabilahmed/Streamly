@@ -52,7 +52,7 @@ const Login = () => {
                   value={formData.email}
                   onChange={handleChange}
                   required
-                  className="w-full pl-10 pr-4 py-3 bg-zinc-900 border border-zinc-800 text-white rounded-xl focus:ring-1 focus:ring-white focus:border-white outline-none transition-all placeholder-zinc-600"
+                  className="w-full pl-10 pr-4 py-3 bg-zinc-900 border border-zinc-800 text-white rounded-xl focus:ring-1 focus:ring-white focus:border-white outline-none placeholder-zinc-600"
                   placeholder="name@example.com"
                 />
               </div>
@@ -72,7 +72,7 @@ const Login = () => {
                   value={formData.password}
                   onChange={handleChange}
                   required
-                  className="w-full pl-10 pr-12 py-3 bg-zinc-900 border border-zinc-800 text-white rounded-xl focus:ring-1 focus:ring-white focus:border-white outline-none transition-all placeholder-zinc-600"
+                  className="w-full pl-10 pr-12 py-3 bg-zinc-900 border border-zinc-800 text-white rounded-xl focus:ring-1 focus:ring-white focus:border-white outline-none placeholder-zinc-600"
                   placeholder="••••••••"
                 />
                 <button
@@ -91,7 +91,7 @@ const Login = () => {
 
             <button
               type="submit"
-              className="w-full py-3.5 px-4 bg-white hover:bg-zinc-200 text-black text-sm font-semibold rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 group"
+              className="w-full py-3.5 px-4 bg-white hover:bg-zinc-200 text-black text-sm font-semibold rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 group cursor-pointer"
             >
               Sign In
               <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
