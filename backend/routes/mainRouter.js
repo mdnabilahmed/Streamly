@@ -7,6 +7,6 @@ router.get("/", (req, res) => {
     res.send("Server is running fantastically!!!");
 });
 
-router.post("/auth", authRouter);
+router.use("/auth", authRouter);
 
 module.exports = router;

@@ -14,6 +14,9 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
+app.get("/", (req, res) => {
+    res.send("Welcome to Streamly Backend Server");
+});
 app.use("/", mainRouter);
 
 app.listen(8080, () => {
