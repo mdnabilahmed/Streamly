@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { Link } from "react-router-dom";
-import { Eye, EyeOff, Mail, Lock, ArrowRight } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Eye, EyeOff, Mail, Lock, ArrowRight, Loader } from "lucide-react";
+import { useDispatch, useSelector } from "react-redux";
+import type { AppDispatch, RootState } from "../../redux/store";
+import { loginUser } from "../../redux/authSlice";
 
 interface FormData {
   email: string;
@@ -15,13 +18,27 @@ const Login = () => {
     password: "",
   });
 
+  const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
+  const { isLoading, error, isAuthenticated, user } = useSelector(
+    (state: RootState) => state.auth
+  );
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      if (user.role === "admin") navigate("/admin-dashboard");
+      else if (user.role === "editor") navigate("/user-dashboard");
+      else navigate("/dashboard");
+    }
+  }, [isAuthenticated, user, navigate]);
+
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    console.log(formData);
+    dispatch(loginUser(formData));
   };
 
   return (
@@ -37,6 +54,12 @@ const Login = () => {
         </div>
 
         <div className="px-8 pb-8">
+          {error && (
+            <div className="mb-4 p-3 bg-red-900/50 border border-red-800 text-red-200 text-sm rounded-lg text-center">
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <label className="text-sm font-medium text-zinc-300 ml-1">
@@ -91,10 +114,17 @@ const Login = () => {
 
             <button
               type="submit"
-              className="w-full py-3.5 px-4 bg-white hover:bg-zinc-200 text-black text-sm font-semibold rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 group cursor-pointer"
+              disabled={isLoading}
+              className="w-full py-3.5 px-4 bg-white hover:bg-zinc-200 text-black text-sm font-semibold rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 group cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              Sign In
-              <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+              {isLoading ? (
+                <Loader className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  Sign In
+                  <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                </>
+              )}
             </button>
           </form>
 

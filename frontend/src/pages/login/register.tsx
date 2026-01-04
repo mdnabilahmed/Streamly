@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -9,7 +9,11 @@ import {
   Shield,
   ArrowRight,
   ChevronDown,
+  Loader,
 } from "lucide-react";
+import { useDispatch, useSelector } from "react-redux";
+import type { AppDispatch, RootState } from "../../redux/store";
+import { registerUser } from "../../redux/authSlice";
 
 enum UserRole {
   Admin = "admin",
@@ -25,12 +29,25 @@ interface FormData {
 
 const Register = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch<AppDispatch>();
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [formData, setFormData] = useState<FormData>({
     email: "",
     password: "",
     role: UserRole.Viewer,
   });
+
+  const { isLoading, error, isAuthenticated, user } = useSelector(
+    (state: RootState) => state.auth
+  );
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      if (user.role === "admin") navigate("/admin-dashboard");
+      else if (user.role === "editor") navigate("/user-dashboard");
+      else navigate("/dashboard");
+    }
+  }, [isAuthenticated, user, navigate]);
 
   const handleChange = (
     e: ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -40,8 +57,7 @@ const Register = () => {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    console.log(formData);
-    navigate("/login");
+    dispatch(registerUser(formData));
   };
 
   return (
@@ -57,6 +73,12 @@ const Register = () => {
         </div>
 
         <div className="px-8 pb-8">
+          {error && (
+            <div className="mb-4 p-3 bg-red-900/50 border border-red-800 text-red-200 text-sm rounded-lg text-center">
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <label className="text-sm font-medium text-zinc-300 ml-1">
@@ -153,10 +175,17 @@ const Register = () => {
 
             <button
               type="submit"
-              className="w-full py-3.5 px-4 bg-white hover:bg-zinc-200 text-black text-sm font-semibold rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 group cursor-pointer"
+              disabled={isLoading}
+              className="w-full py-3.5 px-4 bg-white hover:bg-zinc-200 text-black text-sm font-semibold rounded-xl shadow-lg transition-all duration-200 flex items-center justify-center gap-2 group cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              Create Account
-              <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+              {isLoading ? (
+                <Loader className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  Create Account
+                  <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                </>
+              )}
             </button>
           </form>
 
