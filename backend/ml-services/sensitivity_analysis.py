@@ -7,6 +7,7 @@ import numpy as np
 import socketio
 import time
 from botocore.exceptions import NoCredentialsError
+from collections import deque
 
 # Initialize Socket.IO client
 sio = socketio.Client()
@@ -44,6 +45,133 @@ def download_video_from_s3(bucket_name, s3_key, download_path):
         print(f"Error downloading file: {e}")
         return False
 
+def detect_skin_regions(frame):
+    """
+    Improved skin detection that looks for concentrated skin regions
+    rather than just total skin percentage
+    """
+    resized_frame = cv2.resize(frame, (320, 240))
+    hsv = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2HSV)
+    ycrcb = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2YCrCb)
+    
+    # Multiple color space detection for better accuracy
+    # HSV-based skin detection
+    lower_skin_hsv = np.array([0, 20, 70], dtype=np.uint8)
+    upper_skin_hsv = np.array([20, 255, 255], dtype=np.uint8)
+    mask_hsv = cv2.inRange(hsv, lower_skin_hsv, upper_skin_hsv)
+    
+    # YCrCb-based skin detection (more robust)
+    lower_skin_ycrcb = np.array([0, 133, 77], dtype=np.uint8)
+    upper_skin_ycrcb = np.array([255, 173, 127], dtype=np.uint8)
+    mask_ycrcb = cv2.inRange(ycrcb, lower_skin_ycrcb, upper_skin_ycrcb)
+    
+    # Combine masks
+    skin_mask = cv2.bitwise_and(mask_hsv, mask_ycrcb)
+    
+    # Remove noise
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    skin_mask = cv2.morphologyEx(skin_mask, cv2.MORPH_CLOSE, kernel)
+    skin_mask = cv2.morphologyEx(skin_mask, cv2.MORPH_OPEN, kernel)
+    
+    # Find contours to detect concentrated regions
+    contours, _ = cv2.findContours(skin_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    total_pixels = resized_frame.shape[0] * resized_frame.shape[1]
+    skin_pixels = cv2.countNonZero(skin_mask)
+    skin_percentage = (skin_pixels / total_pixels) * 100
+    
+    # Analyze region concentration
+    large_regions = [cv2.contourArea(c) for c in contours if cv2.contourArea(c) > 500]
+    num_large_regions = len(large_regions)
+    largest_region_ratio = max(large_regions) / total_pixels if large_regions else 0
+    
+    return {
+        'skin_percentage': skin_percentage,
+        'num_regions': num_large_regions,
+        'largest_region_ratio': largest_region_ratio * 100,
+        'concentrated': largest_region_ratio > 0.25  # Single large region
+    }
+
+def detect_violence_indicators(frame, prev_frame, motion_history):
+    """
+    Improved violence detection using multiple indicators:
+    - Sudden color changes (blood, flashes)
+    - Edge intensity (sharp objects, chaos)
+    - Motion patterns (erratic vs smooth)
+    """
+    resized_frame = cv2.resize(frame, (320, 240))
+    gray = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2GRAY)
+    gray = cv2.GaussianBlur(gray, (21, 21), 0)
+    
+    violence_score = 0
+    indicators = []
+    
+    if prev_frame is not None:
+        # 1. Motion Analysis
+        frame_delta = cv2.absdiff(prev_frame, gray)
+        thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
+        motion_pixels = cv2.countNonZero(thresh)
+        total_pixels = gray.shape[0] * gray.shape[1]
+        motion_percentage = (motion_pixels / total_pixels) * 100
+        
+        # Track motion history to detect patterns
+        motion_history.append(motion_percentage)
+        
+        # Calculate motion variance (erratic motion indicator)
+        if len(motion_history) >= 5:
+            motion_variance = np.var(list(motion_history))
+            motion_mean = np.mean(list(motion_history))
+            
+            # High variance with high motion = chaos/violence
+            # Smooth high motion = sports/action
+            if motion_mean > 25 and motion_variance > 50:
+                violence_score += 2
+                indicators.append("erratic_motion")
+            elif motion_mean > 40 and motion_variance > 100:
+                violence_score += 3
+                indicators.append("high_chaos")
+        
+        # 2. Edge Detection (weapons, sharp objects)
+        edges = cv2.Canny(gray, 50, 150)
+        edge_pixels = cv2.countNonZero(edges)
+        edge_percentage = (edge_pixels / total_pixels) * 100
+        
+        # Extremely high edge density can indicate violence/chaos
+        if edge_percentage > 15:
+            violence_score += 1
+            indicators.append("high_edge_density")
+        
+        # 3. Color-based indicators (red tones for blood)
+        hsv = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2HSV)
+        # Detect red colors
+        lower_red1 = np.array([0, 70, 50])
+        upper_red1 = np.array([10, 255, 255])
+        lower_red2 = np.array([170, 70, 50])
+        upper_red2 = np.array([180, 255, 255])
+        
+        mask_red1 = cv2.inRange(hsv, lower_red1, upper_red1)
+        mask_red2 = cv2.inRange(hsv, lower_red2, upper_red2)
+        red_mask = cv2.bitwise_or(mask_red1, mask_red2)
+        red_pixels = cv2.countNonZero(red_mask)
+        red_percentage = (red_pixels / total_pixels) * 100
+        
+        # High red content combined with high motion
+        if red_percentage > 25 and motion_percentage > 20:
+            violence_score += 2
+            indicators.append("red_with_motion")
+        
+        # 4. Brightness variance (flashes, explosions)
+        brightness_std = np.std(gray)
+        if brightness_std > 60:
+            violence_score += 1
+            indicators.append("high_contrast")
+    
+    return {
+        'violence_score': violence_score,
+        'indicators': indicators,
+        'motion_percentage': motion_percentage if prev_frame is not None else 0
+    }, gray
+
 def analyze_video(input_path, video_id, user_id):
     cap = cv2.VideoCapture(input_path)
     if not cap.isOpened():
@@ -53,12 +181,13 @@ def analyze_video(input_path, video_id, user_id):
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
     
-    # Heuristic counters
-    skin_frame_count = 0
-    high_motion_frame_count = 0
+    # Tracking variables
+    flagged_skin_frames = []
+    flagged_violence_frames = []
     processed_count = 0
     
     prev_frame = None
+    motion_history = deque(maxlen=10)  # Track last 10 frames
     
     # Skip rate (process every Nth frame)
     skip_frames = 10 
@@ -78,70 +207,84 @@ def analyze_video(input_path, video_id, user_id):
             
         processed_count += 1
         
-        # 1. Nudity Check (Skin Tone Detection - HSV)
-        # Resize for speed
-        resized_frame = cv2.resize(frame, (320, 240))
-        hsv = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2HSV)
+        # Skin detection
+        skin_analysis = detect_skin_regions(frame)
         
-        # Define skin color range in HSV (Start with generic range)
-        lower_skin = np.array([0, 20, 70], dtype=np.uint8)
-        upper_skin = np.array([20, 255, 255], dtype=np.uint8)
+        # More nuanced flagging: high skin + concentrated region
+        if (skin_analysis['skin_percentage'] > 50 and 
+            skin_analysis['concentrated'] and 
+            skin_analysis['largest_region_ratio'] > 30):
+            flagged_skin_frames.append({
+                'frame': current_frame_idx,
+                'data': skin_analysis
+            })
         
-        mask = cv2.inRange(hsv, lower_skin, upper_skin)
-        skin_pixels = cv2.countNonZero(mask)
-        total_pixels = resized_frame.shape[0] * resized_frame.shape[1]
-        skin_percentage = (skin_pixels / total_pixels) * 100
+        # Violence detection
+        violence_analysis, prev_frame = detect_violence_indicators(
+            frame, prev_frame, motion_history
+        )
         
-        if skin_percentage > 40: # Threshold for "significant skin"
-            skin_frame_count += 1
-            
-        # 2. Violence/Chaos Check (Motion Intensity)
-        gray = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (21, 21), 0)
-        
-        if prev_frame is None:
-            prev_frame = gray
-        else:
-            frame_delta = cv2.absdiff(prev_frame, gray)
-            thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
-            motion_pixels = cv2.countNonZero(thresh)
-            motion_percentage = (motion_pixels / total_pixels) * 100
-            
-            if motion_percentage > 30: # Threshold for high motion/chaos
-                high_motion_frame_count += 1
-            
-            prev_frame = gray
+        # Flag only if violence score is significant
+        if violence_analysis['violence_score'] >= 3:
+            flagged_violence_frames.append({
+                'frame': current_frame_idx,
+                'data': violence_analysis
+            })
 
         # Emit progress
-        progress = int((current_frame_idx / total_frames) * 100)
-        sio.emit('analysis-progress', {'videoId': video_id, 'userId': user_id, 'percentage': progress})
-        
-        # Determine current status based on accumulated data
-        # For simplicity, if we see >> 10% of processed frames with issues, we flag.
+        if processed_count % 5 == 0:  # Reduce socket emissions
+            progress = int((current_frame_idx / total_frames) * 100)
+            sio.emit('analysis-progress', {
+                'videoId': video_id, 
+                'userId': user_id, 
+                'percentage': progress
+            })
         
     cap.release()
     
-    # Final Decision Logic
-    # If > 15% of analyzed frames had high skin content
-    # OR > 20% of analyzed frames had high motion (potential violence/chaos)
+    # Final Decision Logic - require sustained patterns, not isolated frames
     flagged = False
     reasons = []
+    confidence_scores = {}
     
     if processed_count > 0:
-        if (skin_frame_count / processed_count) > 0.15:
-            flagged = True
-            reasons.append("Nudity/Inappropriate Content detected")
+        # Require at least 10% of frames to be flagged (sustained pattern)
+        skin_flag_ratio = len(flagged_skin_frames) / processed_count
+        violence_flag_ratio = len(flagged_violence_frames) / processed_count
         
-        if (high_motion_frame_count / processed_count) > 0.20:
+        # Nudity/Inappropriate Content
+        if skin_flag_ratio > 0.10:  # 10% of frames show concentrated skin
             flagged = True
-            reasons.append("High Violence/Chaos detected")
+            reasons.append("Potential inappropriate content detected")
+            confidence_scores['nudity'] = min(skin_flag_ratio * 100, 100)
+        
+        # Violence/Chaos
+        if violence_flag_ratio > 0.15:  # 15% of frames show violence indicators
+            flagged = True
+            reasons.append("Potential violent content detected")
+            confidence_scores['violence'] = min(violence_flag_ratio * 100, 100)
+        
+        # Check for clustering (multiple flags in short timespan)
+        if len(flagged_violence_frames) >= 3:
+            frame_numbers = [f['frame'] for f in flagged_violence_frames]
+            gaps = [frame_numbers[i+1] - frame_numbers[i] for i in range(len(frame_numbers)-1)]
+            avg_gap = np.mean(gaps) if gaps else float('inf')
             
+            # If flags are clustered (small gaps), increase confidence
+            if avg_gap < 100:  # Flags within ~10 seconds of each other
+                if 'violence' in confidence_scores:
+                    confidence_scores['violence'] = min(confidence_scores['violence'] * 1.3, 100)
+    
     result = {
         'status': 'flagged' if flagged else 'safe',
         'reasons': reasons,
+        'confidence': confidence_scores,
         'metrics': {
-            'skin_score': skin_frame_count / processed_count if processed_count else 0,
-            'motion_score': high_motion_frame_count / processed_count if processed_count else 0
+            'skin_flagged_frames': len(flagged_skin_frames),
+            'violence_flagged_frames': len(flagged_violence_frames),
+            'total_processed': processed_count,
+            'skin_flag_ratio': skin_flag_ratio if processed_count > 0 else 0,
+            'violence_flag_ratio': violence_flag_ratio if processed_count > 0 else 0
         }
     }
     
@@ -157,7 +300,6 @@ def main():
         print(f"Connected to backend at {args.socketUrl}")
     except Exception as e:
         print(f"Could not connect to socket server: {e}")
-        # Continue anyway, but emitting won't work
     
     # Setup temporary file path
     temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
@@ -167,23 +309,24 @@ def main():
     video_filename = f"{args.videoId}_{int(time.time())}.mp4"
     temp_path = os.path.join(temp_dir, video_filename)
     
-    # Download from S3
-    bucket = os.getenv('S3_BUCKET_NAME') # Ensure env var is passed to script or hardcode for test
-    # Note: In real production, we passed S3 credentials via env vars to this process/container
-    # Here we assume the environment where this runs has access (e.g. AWS CLI configured or Env vars set)
-    # The NodeJS `spawn` inherits env vars by default, so if backend has them, python should too.
-    
-    # Fallback to fetching bucket from args or assuming it's in env
-    # For now, let's assume it's in ENV as S3_BUCKET_NAME
+    bucket = os.getenv('S3_BUCKET_NAME')
     if not bucket:
-        # Try to parse from nodejs arguments if we decided to pass it, but we didn't. 
-        # We rely on S3_BUCKET_NAME env var.
         print("S3_BUCKET_NAME not set via environment.")
-        # If it fails, report error
+        sio.emit('analysis-complete', {
+            'videoId': args.videoId, 
+            'userId': args.userId, 
+            'result': {'status': 'failed', 'reason': 'S3 bucket not configured'}
+        })
+        sio.disconnect()
+        return
     
     success = download_video_from_s3(bucket, args.s3Key, temp_path)
     if not success:
-        sio.emit('analysis-complete', {'videoId': args.videoId, 'userId': args.userId, 'result': {'status': 'failed', 'reason': 'Download failed'}})
+        sio.emit('analysis-complete', {
+            'videoId': args.videoId, 
+            'userId': args.userId, 
+            'result': {'status': 'failed', 'reason': 'Download failed'}
+        })
         sio.disconnect()
         return
 
@@ -195,9 +338,12 @@ def main():
         os.remove(temp_path)
         
     # Emit final result
-    sio.emit('analysis-complete', {'videoId': args.videoId, 'userId': args.userId, 'result': result})
+    sio.emit('analysis-complete', {
+        'videoId': args.videoId, 
+        'userId': args.userId, 
+        'result': result
+    })
     
-    # Give a moment for socket to flush
     time.sleep(2)
     sio.disconnect()
 

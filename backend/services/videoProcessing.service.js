@@ -2,6 +2,8 @@ const { spawn } = require('child_process');
 const path = require('path');
 const Video = require('../models/Video');
 
+const backend_url = process.env.BACKEND_URL || 'http://localhost:8080';
+
 const processVideo = async (videoId, s3Key, userId) => {
   return new Promise((resolve, reject) => {
     console.log(`Starting processing for video ${videoId}`);
@@ -15,7 +17,7 @@ const processVideo = async (videoId, s3Key, userId) => {
         '--videoId', videoId,
         '--s3Key', s3Key,
         '--userId', userId,
-        '--socketUrl', 'http://localhost:8080' // Assuming default local URL, should be env var in prod
+        '--socketUrl', backend_url
     ]);
 
     pythonProcess.stdout.on('data', (data) => {
