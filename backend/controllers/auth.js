@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const UserModel = require("../models/User");
 
 const { signAccessToken, signRefreshToken, verifyRefreshToken, verifyAccessToken } = require("../utils/jwt");
+const bcrypt_hash = process.env.BCRYPT_HASH;
 
 const signup = async (req, res) => {
     try {
@@ -22,8 +23,8 @@ const signup = async (req, res) => {
             });
         }
 
-        const user = await UserModel.findOne({ email });
-        if (user) {
+        const checkUser = await UserModel.findOne({ email });
+        if (checkUser) {
             return res.status(409).json({
                 message: "User already exists, you can login",
                 success: false,
@@ -32,14 +33,14 @@ const signup = async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 14);
 
-        const userModel = new UserModel({ email, hashedPassword, role, refreshTokens: [] });
-        userModel.joined = Date.now();
+        const user = new UserModel({ email, password: hashedPassword, role, refreshTokens: [] });
+        user.joined = Date.now();
 
-        const accessToken = signAccessToken({ id: userModel._id });
-        const refreshToken = signRefreshToken({ id: userModel._id });
+        const accessToken = signAccessToken({ id: user._id });
+        const refreshToken = signRefreshToken({ id: user._id });
 
-        userModel.refreshTokens.push({ token: refreshToken });
-        const savedUserData = await userModel.save();
+        user.refreshTokens.push({ token: refreshToken });
+        const savedUserData = await user.save();
 
         res.cookie("refreshToken", refreshToken, {
             httpOnly: true,
@@ -66,6 +67,14 @@ const signup = async (req, res) => {
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
+
+        if(!email || !password){
+            return res.status(400).json({
+                message: "Bad request",
+                success: false,
+            });
+        }
+
         const user = await UserModel.findOne({ email });
 
         if (!user) {
@@ -82,22 +91,28 @@ const login = async (req, res) => {
                 .json({ message: "Wrong Password", success: false });
         }
 
-        const jwtToken = jwt.sign(
-            { email: user.email, _id: user._id },
-            process.env.JWT_SECRET,
-            { expiresIn: "240h" }
-        );
+        const accessToken = signAccessToken({ id: user._id });
+        const refreshToken = signRefreshToken({ id: user._id });
 
-        console.log(user._id);
+        user.refreshTokens.push({ token: refreshToken });
+        const savedUserData = await user.save();
+
+        res.cookie("refreshToken", refreshToken, {
+            httpOnly: true,
+            secure: (process.env.NODE_ENV === "production"),
+            sameSite: "strict",
+            path: "/auth/refresh"
+        });
 
         res.status(200).json({
-            message: "Logged in Successfully",
+            message: "Logged in successfully",
             success: true,
-            jwtToken,
-            name: user.name,
-            userId: user._id,
+            accessToken,
+            userId: savedUserData._id,
+            role: savedUserData.role,
         });
     } catch (err) {
+        console.log("Error while Login: ", err);
         res.status(500).json({
             message: "Internal Server error",
             success: false,

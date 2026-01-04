@@ -20,4 +20,4 @@ export const dashboardData = [
     status: "Completed",
     videoSrc: "video3.mp4",
   },
-];
+ ];

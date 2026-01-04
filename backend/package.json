@@ -10,6 +10,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.962.0",
+    "@aws-sdk/s3-request-presigner": "^3.962.0",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "body-parser": "^2.2.1",
@@ -21,7 +23,9 @@
     "module-alias": "^2.2.3",
     "mongoose": "^9.1.1",
     "nodemon": "^3.1.11",
-    "socket.io": "^4.8.3"
+    "nsfwjs": "^4.2.1",
+    "socket.io": "^4.8.3",
+    "uuid": "^13.0.0"
   },
   "_moduleAliases": {
     "@": ".",

@@ -20,14 +20,14 @@ const JwtValidation = (req, res, next) => {
     }
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
         // console.log("decoded", decoded);
-        req.userId = decoded._id; // token payload includes an `id` field for the user ID
+        req.userId = decoded._id; // token payload includes an `_id` field for the user ID
         // console.log(req.userId);
 
         next();
     } catch (error) {
-        console.log(error);
+        console.log("Error while JWT Validation: ", error);
         res.status(401).json({ message: "Token is not valid", success: false });
     }
 };
