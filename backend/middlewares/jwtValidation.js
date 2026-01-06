@@ -18,13 +18,11 @@ const JwtValidation = (req, res, next) => {
             .status(401)
             .json({ message: "Token missing from header", success: false });
     }
+    // console.log("Token", token);
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-        // console.log("decoded", decoded);
-        req.userId = decoded._id; // token payload includes an `_id` field for the user ID
-        // console.log(req.userId);
-
+        req.userId = decoded.id; // token payload includes an `_id` field for the user ID
         next();
     } catch (error) {
         console.log("Error while JWT Validation: ", error);

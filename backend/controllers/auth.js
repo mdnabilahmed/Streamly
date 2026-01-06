@@ -122,7 +122,9 @@ const login = async (req, res) => {
 
 /* REFRESH TOKEN */
 const refresh = async (req, res) => {
-    const token = req.cookies.refreshToken;
+    // console.log("Refresh was called");
+
+    const token = req.cookies?.refreshToken;
     if (!token) return res.sendStatus(401);
 
     let payload;
